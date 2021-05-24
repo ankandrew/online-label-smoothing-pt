@@ -1,7 +1,6 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
-
-from label_smooth import LabelSmoothingLoss
 
 
 class OnlineLabelSmoothing(nn.Module):
@@ -19,33 +18,81 @@ class OnlineLabelSmoothing(nn.Module):
         super(OnlineLabelSmoothing, self).__init__()
         assert 0 <= self.a <= 1, 'Alpha must be in range [0, 1]'
         self.a = alpha
-        # Initialize soft labels to normal Label Smoothing for first epoch
-        self.soft_supervise = (1 - smoothing) * torch.eye(n_classes) + smoothing / n_classes
+        # Initialize soft labels with normal LS for first epoch
+        self.supervise = (1 - smoothing) * torch.eye(n_classes) + smoothing / n_classes
+
         # # With alpha / (n_classes - 1) ----> Alternative
         # self.supervise = torch.zeros(n_classes, n_classes)
         # self.supervise.fill_(smoothing / (n_classes - 1))
         # self.supervise.fill_diagonal_(1 - smoothing)
+
+        # Update matrix is used to supervise next epoch
         self.update = torch.zeros_like(self.supervise)
-        self.soft_loss = LabelSmoothingLoss(n_classes, smoothing)
-        # self.hard_loss = LabelSmoothingLoss(n_classes, 0)
+        # For normalizing we need a count for each class
+        self.idx_count = torch.zeros(n_classes)
         self.hard_loss = nn.CrossEntropyLoss()
 
-    def forward(self, y_hat, y):
+    def forward(self, y_h: Tensor, y: Tensor):
         # Calculate the final loss
-        soft_loss = self.soft_loss(y_hat, y)
-        hard_loss = self.hard_loss(y_hat, y)
-        # Update with correct predictions
-        self.step(y_hat, y)
+        soft_loss = self.soft_loss(y_h, y)
+        hard_loss = self.hard_loss(y_h, y)
         return self.a * hard_loss + (1 - self.a) * soft_loss
 
-    def soft_loss(self, y_hat, y):
-        # y_hat = y_hat.softmax(dim=-1)
-        # return torch.mean(torch.sum(-true_dist * y_hat, dim=self.dim))
-        pass
+    def soft_loss(self, y_h: Tensor, y: Tensor):
+        """
+        Calculates the soft loss and calls step
+        to update `update`.
 
-    def step(self):
-        pass
+        :param y_h: Predicted logits.
+        :param y: Ground truth labels.
 
-    def __next_epoch(self):
+        :return: Calculates the soft loss based on current supervise matrix.
+        """
+        y_h = y_h.log_softmax(dim=-1)
+        self.step(y_h.exp(), y)  # TODO: torch.no_grad()
+        # Find the true_dist
+        true_dist = None
+        return torch.mean(torch.sum(-true_dist * y_h, dim=self.dim))
+
+    def step(self, y_h: Tensor, y: Tensor) -> None:
+        """
+        Updates `update` with the probabilities
+        of the correct predictions and updates `idx_count` counter for
+        later normalization.
+
+        Steps:
+            1. Calculate correct classified examples.
+            2. Filter `y_h` based on the correct classified.
+            3. Add `y_h_f` rows to the `j` (based on y_h_idx) column of `memory`.
+            4. Keep count of # samples added for each `y_h_idx` column.
+            5. Average memory by dividing column-wise by result of step (4).
+
+        Note on (5): This is done outside this function since we only need to
+                     normalize at the end of the epoch.
+        """
+        # 1. Calculate predicted classes
+        y_h_idx = y_h.argmax(dim=-1)
+        # 2. Filter only correct
+        mask = torch.eq(y_h_idx, y.squeeze(dim=-1))
+        y_h_c = y_h[mask]
+        y_h_idx_c = y_h_idx[mask]
+        # 3. Add y_h probabilities rows as columns to `memory`
+        self.update.index_add_(1, y_h_idx_c, y_h_c.swapaxes(-1, -2))
+        # 4. Update `idx_count`
+        self.idx_count.index_add_(0, y_h_idx_c, torch.ones_like(y_h_idx_c, dtype=torch.float32))
+
+    def next_epoch(self) -> None:
+        """
+        This function should be called at the end of the epoch.
+
+        It basically sets the `supervise` matrix to be the `update`
+        and initializes to zero this last matrix.
+        """
+        # 5. Divide memory by `idx_count` to obtain average (column-wise)
+        self.idx_count[torch.eq(self.idx_count, 0)] = 1  # Avoid 0 denominator
+        # Normalize by taking the average
+        self.update /= self.idx_count
+
         self.supervise = self.update
         self.update = torch.zeros_like(self.supervise)
+
