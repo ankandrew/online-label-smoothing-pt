@@ -28,7 +28,7 @@ class TestUpdate(unittest.TestCase):
         y_h_c = y_h[mask]
         y_h_idx_c = y_h_idx[mask]  # tensor([1, 0, 1])
         # 3. Add y_h probabilities rows as columns to `memory`
-        memory.index_add_(1, y_h_idx_c, y_h_c.T)
+        memory.index_add_(1, y_h_idx_c, y_h_c.swapaxes(-1, -2))
         # 4. Update `idx_count`
         idx_count.index_add_(0, y_h_idx_c, torch.ones_like(y_h_idx_c, dtype=torch.float32))
         # 5. Divide memory by `idx_count` to obtain average (column-wise)
