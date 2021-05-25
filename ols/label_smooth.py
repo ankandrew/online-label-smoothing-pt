@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes, smoothing=0.0, dim=-1, weight=None):
+    def __init__(self, classes, smoothing=0.1, dim=-1, weight=None):
         """
         Taken from: https://stackoverflow.com/a/66773267
         if smoothing == 0, it's one-hot method if 0 < smoothing < 1, it's smooth method
