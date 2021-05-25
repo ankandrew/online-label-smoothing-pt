@@ -1,6 +1,6 @@
 import torch
-from torch import Tensor
 import torch.nn as nn
+from torch import Tensor
 
 
 class OnlineLabelSmoothing(nn.Module):
@@ -18,6 +18,7 @@ class OnlineLabelSmoothing(nn.Module):
         super(OnlineLabelSmoothing, self).__init__()
         assert 0 <= alpha <= 1, 'Alpha must be in range [0, 1]'
         self.a = alpha
+        self.n_classes = n_classes
         # Initialize soft labels with normal LS for first epoch
         self.supervise = (1 - smoothing) * torch.eye(n_classes) + smoothing / n_classes
 
