@@ -1,19 +1,43 @@
-import torch
 import unittest
+
+import torch
+
+from ols.online_label_smooth import OnlineLabelSmoothing
 
 
 class TestUpdate(unittest.TestCase):
-    def test_update_logic(self):
-        k = 3  # Num. classes
-        memory = torch.zeros(k, k)
-        idx_count = torch.zeros(k)
-        y = torch.tensor([1, 0, 0, 1], dtype=torch.long)
-        y_h = torch.tensor([
+    def setUp(self) -> None:
+        self.k = 3  # Num. classes
+        self.y = torch.tensor([1, 0, 0, 1], dtype=torch.long)
+        self.y_h = torch.tensor([
             [0.3, 0.6, 0.1],  # Correct
             [0.7, 0.2, 0.1],  # Correct
             [0.3, 0.3, 0.4],
             [0.2, 0.7, 0.1]  # Correct
         ])
+
+    def test_ols_step_next_epoch(self):
+        ols = OnlineLabelSmoothing(alpha=0.5, n_classes=3, smoothing=0.1)
+        ols.step(self.y_h, self.y)
+        # After the step, ols.update should have accumulated correct probabilities
+        expected_update = torch.tensor([
+            [0.7, 0.5, 0.00],
+            [0.2, 1.3, 0.00],
+            [0.1, 0.2, 0.00]
+        ])
+        expected_idx_count = torch.tensor([1, 2, 0])
+        self.assertTrue(torch.eq(ols.update, expected_update).all().item())
+        self.assertTrue(torch.eq(ols.idx_count, expected_idx_count).all().item())
+        # Check after next epoch
+        # 1. Check for NaN in `ols.supervise`
+        # 2. idx_count is all zero
+        ols.next_epoch()
+        self.assertTrue(~torch.isnan(ols.supervise).any())
+        self.assertTrue((ols.idx_count == 0).all())
+
+    def test_update_logic(self):
+        memory = torch.zeros(self.k, self.k)
+        idx_count = torch.zeros(self.k)
         '''
         1. Calculate correct classified examples
         2. Filter `y_h` based on the correct classified
@@ -22,10 +46,10 @@ class TestUpdate(unittest.TestCase):
         5. Average memory by dividing column-wise by result of step (4)
         '''
         # 1. Calculate predicted classes
-        y_h_idx = y_h.argmax(dim=-1)  # tensor([1, 0, 2, 1])
+        y_h_idx = self.y_h.argmax(dim=-1)  # tensor([1, 0, 2, 1])
         # 2. Filter only correct
-        mask = torch.eq(y_h_idx, y)
-        y_h_c = y_h[mask]
+        mask = torch.eq(y_h_idx, self.y)
+        y_h_c = self.y_h[mask]
         y_h_idx_c = y_h_idx[mask]  # tensor([1, 0, 1])
         # 3. Add y_h probabilities rows as columns to `memory`
         memory.index_add_(1, y_h_idx_c, y_h_c.swapaxes(-1, -2))
@@ -44,17 +68,3 @@ class TestUpdate(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-# print(f'''
-# 	Result:
-# 	{memory}
-# ''')
-#
-# print('''
-# 	Expected result:
-# 	[
-# 		[0.7, 0.25, 0.00],
-# 		[0.2, 0.65, 0.00],
-# 		[0.1, 0.10, 0.00]
-# 	]
-# ''')
