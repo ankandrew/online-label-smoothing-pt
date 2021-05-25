@@ -16,7 +16,7 @@ class OnlineLabelSmoothing(nn.Module):
         :param smoothing: Smoothing factor to be used during first epoch in soft_loss
         """
         super(OnlineLabelSmoothing, self).__init__()
-        assert 0 <= self.a <= 1, 'Alpha must be in range [0, 1]'
+        assert 0 <= alpha <= 1, 'Alpha must be in range [0, 1]'
         self.a = alpha
         # Initialize soft labels with normal LS for first epoch
         self.supervise = (1 - smoothing) * torch.eye(n_classes) + smoothing / n_classes
@@ -51,8 +51,8 @@ class OnlineLabelSmoothing(nn.Module):
         y_h = y_h.log_softmax(dim=-1)
         self.step(y_h.exp(), y)  # TODO: torch.no_grad()
         # Find the true_dist
-        true_dist = None
-        return torch.mean(torch.sum(-true_dist * y_h, dim=self.dim))
+        true_dist = torch.index_select(self.supervise, 1, y).swapaxes(-1, -2)
+        return torch.mean(torch.sum(-true_dist * y_h, dim=-1))
 
     def step(self, y_h: Tensor, y: Tensor) -> None:
         """
@@ -73,7 +73,7 @@ class OnlineLabelSmoothing(nn.Module):
         # 1. Calculate predicted classes
         y_h_idx = y_h.argmax(dim=-1)
         # 2. Filter only correct
-        mask = torch.eq(y_h_idx, y.squeeze(dim=-1))
+        mask = torch.eq(y_h_idx, y)
         y_h_c = y_h[mask]
         y_h_idx_c = y_h_idx[mask]
         # 3. Add y_h probabilities rows as columns to `memory`
@@ -86,13 +86,12 @@ class OnlineLabelSmoothing(nn.Module):
         This function should be called at the end of the epoch.
 
         It basically sets the `supervise` matrix to be the `update`
-        and initializes to zero this last matrix.
+        and re-initializes to zero this last matrix and `idx_count`.
         """
         # 5. Divide memory by `idx_count` to obtain average (column-wise)
         self.idx_count[torch.eq(self.idx_count, 0)] = 1  # Avoid 0 denominator
         # Normalize by taking the average
         self.update /= self.idx_count
-
+        self.idx_count = torch.zeros(self.n_classes)
         self.supervise = self.update
         self.update = torch.zeros_like(self.supervise)
-
