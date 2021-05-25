@@ -7,7 +7,7 @@ class TestUpdate(unittest.TestCase):
         k = 3  # Num. classes
         memory = torch.zeros(k, k)
         idx_count = torch.zeros(k)
-        y = torch.tensor([[1], [0], [0], [1]], dtype=torch.long)
+        y = torch.tensor([1, 0, 0, 1], dtype=torch.long)
         y_h = torch.tensor([
             [0.3, 0.6, 0.1],  # Correct
             [0.7, 0.2, 0.1],  # Correct
@@ -24,7 +24,7 @@ class TestUpdate(unittest.TestCase):
         # 1. Calculate predicted classes
         y_h_idx = y_h.argmax(dim=-1)  # tensor([1, 0, 2, 1])
         # 2. Filter only correct
-        mask = torch.eq(y_h_idx, y.squeeze(dim=-1))
+        mask = torch.eq(y_h_idx, y)
         y_h_c = y_h[mask]
         y_h_idx_c = y_h_idx[mask]  # tensor([1, 0, 1])
         # 3. Add y_h probabilities rows as columns to `memory`
