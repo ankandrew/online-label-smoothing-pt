@@ -1,9 +1,10 @@
 import unittest
 
 import torch
+import torch.nn as nn
 
-from ols.label_smooth import LabelSmoothingLoss
-from ols.online_label_smooth import OnlineLabelSmoothing
+from ols import LabelSmoothingLoss
+from ols import OnlineLabelSmoothing
 
 
 class TestOnlineLabelSmoothing(unittest.TestCase):
@@ -49,6 +50,18 @@ class TestOnlineLabelSmoothing(unittest.TestCase):
         expected_loss = a * hard_loss_fn(self.x, self.y) + (1 - a) * soft_loss_fn(self.x, self.y)
         ols_fn = OnlineLabelSmoothing(alpha=a, n_classes=self.k, smoothing=self.smoothing)
         self.assertEqual(ols_fn(self.x, self.y), expected_loss)
+
+    def test_forward_pass(self):
+        x, y = torch.randn(self.m, 8*8), torch.randint(self.k, (self.m,))
+        model = nn.Sequential(
+            nn.Linear(8*8, 16),
+            nn.Linear(16, 32),
+            nn.Linear(32, self.k)
+        )
+        ols = OnlineLabelSmoothing(alpha=0.6, n_classes=self.k, smoothing=self.smoothing)
+        y_h = model(x)
+        loss = ols(y_h, y)
+        loss.backward()
 
 
 if __name__ == '__main__':
