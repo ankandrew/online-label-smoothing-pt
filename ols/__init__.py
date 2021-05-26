@@ -1,0 +1,2 @@
+from .label_smooth import LabelSmoothingLoss
+from .online_label_smooth import OnlineLabelSmoothing
