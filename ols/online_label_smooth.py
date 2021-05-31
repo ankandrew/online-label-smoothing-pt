@@ -23,14 +23,14 @@ class OnlineLabelSmoothing(nn.Module):
         # self.supervise = (1 - smoothing) * torch.eye(n_classes) + smoothing / n_classes
 
         # With alpha / (n_classes - 1) ----> Alternative
-        self.supervise = torch.zeros(n_classes, n_classes)
+        self.register_buffer('supervise', torch.zeros(n_classes, n_classes))
         self.supervise.fill_(smoothing / (n_classes - 1))
         self.supervise.fill_diagonal_(1 - smoothing)
 
         # Update matrix is used to supervise next epoch
-        self.update = torch.zeros_like(self.supervise)
+        self.register_buffer('update', torch.zeros_like(self.supervise))
         # For normalizing we need a count for each class
-        self.idx_count = torch.zeros(n_classes)
+        self.register_buffer('idx_count', torch.zeros(n_classes))
         self.hard_loss = nn.CrossEntropyLoss()
 
     def forward(self, y_h: Tensor, y: Tensor):
@@ -50,9 +50,9 @@ class OnlineLabelSmoothing(nn.Module):
         :return: Calculates the soft loss based on current supervise matrix.
         """
         y_h = y_h.log_softmax(dim=-1)
-        self.step(y_h.exp(), y)  # TODO: torch.no_grad()
-        # Find the true_dist
-        true_dist = torch.index_select(self.supervise, 1, y).swapaxes(-1, -2)
+        with torch.no_grad():
+            self.step(y_h.exp(), y)
+            true_dist = torch.index_select(self.supervise, 1, y).swapaxes(-1, -2)
         return torch.mean(torch.sum(-true_dist * y_h, dim=-1))
 
     def step(self, y_h: Tensor, y: Tensor) -> None:
@@ -92,7 +92,8 @@ class OnlineLabelSmoothing(nn.Module):
         # 5. Divide memory by `idx_count` to obtain average (column-wise)
         self.idx_count[torch.eq(self.idx_count, 0)] = 1  # Avoid 0 denominator
         # Normalize by taking the average
+        # TODO: Softmax instead of average
         self.update /= self.idx_count
-        self.idx_count = torch.zeros(self.n_classes)
+        self.idx_count.zero_()
         self.supervise = self.update
-        self.update = torch.zeros_like(self.supervise)
+        self.update = self.update.clone().zero_()
