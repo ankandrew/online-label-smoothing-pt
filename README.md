@@ -92,10 +92,12 @@ pip install -r requirements.txt
 ## Citation
 
 ```
-@article{bochkovskiy2020yolov4,
-  title={{YOLOv4}: Optimal Speed and Accuracy of Object Detection},
-  author={Bochkovskiy, Alexey and Wang, Chien-Yao and Liao, Hong-Yuan Mark},
-  journal={arXiv preprint arXiv:2004.10934},
-  year={2020}
+@misc{zhang2020delving,
+      title={Delving Deep into Label Smoothing}, 
+      author={Chang-Bin Zhang and Peng-Tao Jiang and Qibin Hou and Yunchao Wei and Qi Han and Zhen Li and Ming-Ming Cheng},
+      year={2020},
+      eprint={2011.12562},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
 }
 ```
