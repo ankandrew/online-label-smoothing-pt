@@ -17,7 +17,7 @@ More details and experiment results can be found in the [paper](https://arxiv.or
 
 Usage of [**OnlineLabelSmoothing**](./ols/online_label_smooth.py) is pretty straightforward.
 Just use it as you would use PyTorch [**CrossEntropyLoss**](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html).
-The only thing that is different is that at the end of the epoch you should call `OnlineLabelSmoothing.next_epoch()` so that it internally updates the
+The only thing that is different is that at the end of the epoch you should call `OnlineLabelSmoothing.next_epoch()`. It updates the
 `OnlineLabelSmoothing.supervise` matrix that will be used in the next epoch for the _**soft labels**_.
 
 
@@ -58,11 +58,12 @@ for epoch in range(...):  # loop over the dataset multiple times
 
 ### PyTorchLightning
 
-With PL you can simple call `next_epoch()` at the end of the epoch with:
+With PL you can simply call `next_epoch()` at the end of the epoch with:
 
 ```python
 import pytorch_lightning as pl
 from ols import OnlineLabelSmoothing
+
 
 class LitClassification(pl.LightningModule):
     def __init__(self):
@@ -78,7 +79,7 @@ class LitClassification(pl.LightningModule):
     def training_step(self, train_batch, batch_idx):
         pass
 
-    def on_train_epoch_end(self):
+    def on_train_epoch_end(self, **kwargs):
         self.criterion.next_epoch()
 
 ```
