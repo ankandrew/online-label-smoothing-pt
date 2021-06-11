@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from .label_smooth import LabelSmoothingLoss
+
 
 class OnlineLabelSmoothing(nn.Module):
     """
@@ -9,11 +11,18 @@ class OnlineLabelSmoothing(nn.Module):
     https://arxiv.org/pdf/2011.12562.pdf
     """
 
-    def __init__(self, alpha: float, n_classes: int, smoothing: float = 0.1):
+    def __init__(self,
+                 alpha: float,
+                 n_classes: int,
+                 smoothing: float = 0.1,
+                 warmup: int = 0,
+                 ls_as_hard: bool = False):
         """
-        :param alpha: Term for balancing soft_loss and hard_loss
-        :param n_classes: Number of classes of the classification problem
-        :param smoothing: Smoothing factor to be used during first epoch in soft_loss
+        :param alpha: Term for balancing soft_loss and hard_loss.
+        :param n_classes: Number of classes of the classification problem.
+        :param smoothing: Smoothing factor to be used during first epoch in soft_loss.
+        :param warmup: Number of epochs to wait before accumulating probabilities of correct predicted samples.
+        :param ls_as_hard: Whether to use uniform Label Smoothing as hard loss.
         """
         super(OnlineLabelSmoothing, self).__init__()
         assert 0 <= alpha <= 1, 'Alpha must be in range [0, 1]'
@@ -23,12 +32,17 @@ class OnlineLabelSmoothing(nn.Module):
         self.register_buffer('supervise', torch.zeros(n_classes, n_classes))
         self.supervise.fill_(smoothing / (n_classes - 1))
         self.supervise.fill_diagonal_(1 - smoothing)
-
         # Update matrix is used to supervise next epoch
         self.register_buffer('update', torch.zeros_like(self.supervise))
         # For normalizing we need a count for each class
         self.register_buffer('idx_count', torch.zeros(n_classes))
-        self.hard_loss = nn.CrossEntropyLoss()
+        if ls_as_hard:
+            self.hard_loss = LabelSmoothingLoss(n_classes, smoothing)
+        else:
+            self.hard_loss = nn.CrossEntropyLoss()
+        # For warmup
+        self.warmup = warmup
+        self.epoch_count = 0
 
     def forward(self, y_h: Tensor, y: Tensor):
         # Calculate the final loss
@@ -47,7 +61,7 @@ class OnlineLabelSmoothing(nn.Module):
         :return: Calculates the soft loss based on current supervise matrix.
         """
         y_h = y_h.log_softmax(dim=-1)
-        if self.training:
+        if self.training and self.epoch_count >= self.warmup:
             with torch.no_grad():
                 self.step(y_h.exp(), y)
         true_dist = torch.index_select(self.supervise, 1, y).swapaxes(-1, -2)
@@ -87,10 +101,12 @@ class OnlineLabelSmoothing(nn.Module):
         It basically sets the `supervise` matrix to be the `update`
         and re-initializes to zero this last matrix and `idx_count`.
         """
-        # 5. Divide memory by `idx_count` to obtain average (column-wise)
-        self.idx_count[torch.eq(self.idx_count, 0)] = 1  # Avoid 0 denominator
-        # Normalize by taking the average
-        self.update /= self.idx_count
-        self.idx_count.zero_()
-        self.supervise = self.update
-        self.update = self.update.clone().zero_()
+        if self.epoch_count >= self.warmup:
+            # 5. Divide memory by `idx_count` to obtain average (column-wise)
+            self.idx_count[torch.eq(self.idx_count, 0)] = 1  # Avoid 0 denominator
+            # Normalize by taking the average
+            self.update /= self.idx_count
+            self.idx_count.zero_()
+            self.supervise = self.update
+            self.update = self.update.clone().zero_()
+        self.epoch_count += 1
