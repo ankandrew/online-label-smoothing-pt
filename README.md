@@ -56,6 +56,9 @@ for epoch in range(...):  # loop over the dataset multiple times
     criterion.next_epoch()
 ```
 
+_Note: `criterion.eval()` should be called before eval/testing and `criterion.train()` should be
+called before training. Otherwise, test/val statistics will be used in [`step()`](ols/online_label_smooth.py)._
+
 ### PyTorchLightning
 
 With PL you can simply call `next_epoch()` at the end of the epoch with:
