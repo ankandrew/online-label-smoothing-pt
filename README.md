@@ -55,6 +55,8 @@ for epoch in range(...):  # loop over the dataset multiple times
     # Update the soft labels for next epoch
     criterion.next_epoch()
 ```
+_Note: `criterion.eval()` should be called before eval/testing and `criterion.train()` should be
+called before training. Otherwise, test/val statistics will be used in [`step()`](ols/online_label_smooth.py)._
 
 ### PyTorchLightning
 
@@ -83,6 +85,8 @@ class LitClassification(pl.LightningModule):
         self.criterion.next_epoch()
 
 ```
+_Note: In this case `criterion.eval()` and `criterion.train()` aren't needed
+since PyTorchLightning handles this automatically._
 
 ## Installation
 
