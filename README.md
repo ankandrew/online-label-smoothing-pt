@@ -91,7 +91,7 @@ since PyTorchLightning handles this automatically._
 ## Installation
 
 ```
-pip install -r requirements.txt
+pip install -U git+https://github.com/ankandrew/online-label-smoothing-pt.git
 ```
 
 ## Citation
